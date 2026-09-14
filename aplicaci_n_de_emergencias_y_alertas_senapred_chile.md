@@ -1,0 +1,1065 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rescate Chile - Alertas SENAPRED, Emergencias & Red Vecinal</title>
+    <!-- Web App Manifest for PWA installation -->
+    <link rel="manifest" href="data:application/json;base64,ewogICJuYW1lIjogIlJlc2NhdGUgQ2hpbGUiLAogICJzaG9ydF9uYW1lIjogIlJlc2NhdGVDaGlsZSIsCiAgInN0YXJ0X3VybCI6ICIuIiwKICAiZGlzcGxheSI6ICJzdGFuZGFsb25lIiwKICAiYmFja2dyb3VuZF9jb2xvciI6ICIjMDAzOWE2IiwKICAidGhlbWVfY29sb3IiOiAiIzAwMzlhNiIsCiAgImRlc2NyaXB0aW9uIjogIkFwbGljYWNpw7NuIGRlIEVtZXJnZW5jaWFzLCBBbGVydGFzIFNFTkFQUkVEIHkgU2VndXJpZGFkIENvbXVuaXRhcmlhIENoaWxlIgp9">
+    <meta name="theme-color" content="#0039a6">
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        chileRed: '#d52b1e',
+                        chileBlue: '#0039a6',
+                        senapredRed: '#dc2626',
+                        senapredYellow: '#eab308',
+                        senapredGreen: '#16a34a',
+                        crimeAmber: '#ea580c'
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Leaflet OpenStreetMap -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        .pulse-red {
+            animation: pulse-red-anim 1.8s infinite;
+        }
+        @keyframes pulse-red-anim {
+            0% { box-shadow: 0 0 0 0px rgba(220, 38, 38, 0.7); }
+            70% { box-shadow: 0 0 0 15px rgba(220, 38, 38, 0); }
+            100% { box-shadow: 0 0 0 0px rgba(220, 38, 38, 0); }
+        }
+        .pulse-crime {
+            animation: pulse-crime-anim 1.5s infinite;
+        }
+        @keyframes pulse-crime-anim {
+            0% { box-shadow: 0 0 0 0px rgba(234, 88, 12, 0.8); }
+            70% { box-shadow: 0 0 0 18px rgba(234, 88, 12, 0); }
+            100% { box-shadow: 0 0 0 0px rgba(234, 88, 12, 0); }
+        }
+        #map { height: 320px; width: 100%; border-radius: 0.75rem; z-index: 1; }
+    </style>
+</head>
+<body class="bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-100 min-h-full flex flex-col font-sans transition-colors duration-200">
+
+    <!-- Header -->
+    <header class="bg-chileBlue text-white sticky top-0 z-40 shadow-md">
+        <div class="max-w-4xl mx-auto px-4 py-3 flex justify-between items-center">
+            <div class="flex items-center space-x-2">
+                <i class="fa-solid font-bold text-2xl text-chileRed bg-white rounded-full p-1.5 fa-shield-halved"></i>
+                <div>
+                    <h1 class="text-lg font-black tracking-wider leading-tight">RESCATE CHILE</h1>
+                    <p class="text-xs text-slate-200">SENAPRED, Salud & Red Vecinal de Alerta</p>
+                </div>
+            </div>
+            <div class="flex items-center space-x-2">
+                <button id="themeToggleBtn" onclick="toggleTheme()" class="p-2 rounded-lg bg-blue-900 hover:bg-blue-800 text-slate-200 transition" title="Cambiar tema">
+                    <i class="fa-solid fa-moon text-lg" id="themeIcon"></i>
+                </button>
+                <button onclick="openCrimeAlertModal()" class="bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold px-3 py-2 rounded-lg pulse-crime flex items-center gap-1.5 shadow">
+                    <i class="fa-solid fa-triangle-exclamation"></i> ALERTA ROBO
+                </button>
+                <button onclick="triggerEmergencySOS()" class="bg-chileRed hover:bg-red-700 text-white text-xs font-bold px-3 py-2 rounded-lg pulse-red flex items-center gap-1 shadow">
+                    <i class="fa-solid fa-bell"></i> SOS 131
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="max-w-4xl w-full mx-auto flex-1 p-3 md:p-5 pb-28">
+        
+        <!-- Live SENAPRED Alert Banner -->
+        <div id="senapredTopBanner" class="mb-4 p-3.5 rounded-xl border-l-4 border-senapredRed bg-red-50 dark:bg-red-950/40 text-red-900 dark:text-red-200 flex justify-between items-center shadow-sm">
+            <div class="flex items-center gap-3">
+                <span class="relative flex h-3 w-3">
+                  <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                  <span class="relative inline-flex rounded-full h-3 w-3 bg-red-600"></span>
+                </span>
+                <div>
+                    <span class="font-bold text-xs uppercase tracking-wide px-2 py-0.5 rounded bg-red-200 dark:bg-red-800 text-red-900 dark:text-red-100">Alerta Roja Activa</span>
+                    <p class="text-sm font-medium mt-0.5" id="topBannerText">Incendio Forestal en Valparaíso y Múltiples Comunas de RM</p>
+                </div>
+            </div>
+            <button onclick="switchTab('senapredTab')" class="text-xs underline font-semibold text-chileBlue dark:text-blue-400 whitespace-nowrap ml-2">Ver Alertas</button>
+        </div>
+
+        <!-- Navigation Tabs Bar -->
+        <nav class="flex rounded-xl bg-white dark:bg-slate-800 p-1 shadow-sm mb-5 border border-slate-200 dark:border-slate-700 text-xs md:text-sm font-medium overflow-x-auto">
+            <button id="nav-sosTab" onclick="switchTab('sosTab')" class="tab-btn flex-1 py-2.5 px-2 text-center rounded-lg bg-chileBlue text-white font-bold transition flex items-center justify-center gap-1.5 whitespace-nowrap">
+                <i class="fa-solid fa-phone-volume"></i> <span>SOS Express</span>
+            </button>
+            <button id="nav-crimeTab" onclick="switchTab('crimeTab')" class="tab-btn flex-1 py-2.5 px-2 text-center rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition flex items-center justify-center gap-1.5 whitespace-nowrap">
+                <i class="fa-solid fa-hand-fist text-orange-500"></i> <span>Alerta Delito / Vecinos</span>
+            </button>
+            <button id="nav-centersTab" onclick="switchTab('centersTab')" class="tab-btn flex-1 py-2.5 px-2 text-center rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition flex items-center justify-center gap-1.5 whitespace-nowrap">
+                <i class="fa-solid fa-hospital-user"></i> <span>Centros & Mapa</span>
+            </button>
+            <button id="nav-senapredTab" onclick="switchTab('senapredTab')" class="tab-btn flex-1 py-2.5 px-2 text-center rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition flex items-center justify-center gap-1.5 whitespace-nowrap">
+                <i class="fa-solid fa-triangle-exclamation"></i> <span>SENAPRED</span>
+            </button>
+            <button id="nav-friendsTab" onclick="switchTab('friendsTab')" class="tab-btn flex-1 py-2.5 px-2 text-center rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition flex items-center justify-center gap-1.5 whitespace-nowrap">
+                <i class="fa-solid fa-users"></i> <span>Red Familia</span>
+            </button>
+        </nav>
+
+        <!-- TAB 1: SOS Express Direct Dials -->
+        <div id="sosTab" class="tab-content block space-y-5">
+            <div class="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+                <h2 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-1">
+                    <i class="fa-solid fa-phone-flip text-chileRed"></i> Discado Rápido Institucional Chile
+                </h2>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">Haz clic sobre cualquier botón para llamar inmediatamente. Incluye emergencias policiales, de salud y toxicología CITUC UC.</p>
+
+                <!-- Main Emergency Dials -->
+                <div class="grid grid-cols-2 md:grid-cols-3 gap-3 mb-4">
+                    <a href="tel:131" class="flex flex-col items-center p-3 bg-red-600 hover:bg-red-700 text-white rounded-xl shadow-sm hover:shadow transition border border-red-700">
+                        <i class="fa-solid fa-truck-medical text-2xl mb-1"></i>
+                        <span class="text-lg font-black">131</span>
+                        <span class="text-xs font-semibold text-center">SAMU (Salud)</span>
+                    </a>
+                    <a href="tel:132" class="flex flex-col items-center p-3 bg-red-700 hover:bg-red-800 text-white rounded-xl shadow-sm hover:shadow transition border border-red-800">
+                        <i class="fa-solid fa-fire-extinguisher text-2xl mb-1"></i>
+                        <span class="text-lg font-black">132</span>
+                        <span class="text-xs font-semibold text-center">Bomberos</span>
+                    </a>
+                    <a href="tel:133" class="flex flex-col items-center p-3 bg-blue-700 hover:bg-blue-800 text-white rounded-xl shadow-sm hover:shadow transition border border-blue-800">
+                        <i class="fa-solid fa-shield-cat text-2xl mb-1"></i>
+                        <span class="text-lg font-black">133</span>
+                        <span class="text-xs font-semibold text-center">Carabineros</span>
+                    </a>
+                    <a href="tel:134" class="flex flex-col items-center p-3 bg-sky-700 hover:bg-sky-800 text-white rounded-xl shadow-sm hover:shadow transition border border-sky-800">
+                        <i class="fa-solid fa-user-shield text-2xl mb-1"></i>
+                        <span class="text-lg font-black">134</span>
+                        <span class="text-xs font-semibold text-center">PDI</span>
+                    </a>
+                    <a href="tel:1414" class="flex flex-col items-center p-3 bg-orange-600 hover:bg-orange-700 text-white rounded-xl shadow-sm hover:shadow transition border border-orange-700">
+                        <i class="fa-solid fa-building-shield text-2xl mb-1"></i>
+                        <span class="text-lg font-black">1414 / Municipal</span>
+                        <span class="text-xs font-semibold text-center">Seguridad Ciudadana</span>
+                    </a>
+                    <a href="tel:137" class="flex flex-col items-center p-3 bg-teal-700 hover:bg-teal-800 text-white rounded-xl shadow-sm hover:shadow transition border border-teal-800">
+                        <i class="fa-solid fa-ship text-2xl mb-1"></i>
+                        <span class="text-lg font-black">137</span>
+                        <span class="text-xs font-semibold text-center">Rescate Marítimo</span>
+                    </a>
+                </div>
+
+                <!-- CITUC Section -->
+                <div class="pt-3 border-t border-slate-200 dark:border-slate-700">
+                    <h3 class="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wide mb-2 flex items-center gap-1.5">
+                        <i class="fa-solid fa-skull-crossbones text-amber-500"></i> CITUC - Asistencia Toxicológica & Química UC (24/7)
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                        <a href="tel:+56226353800" class="flex items-center justify-between p-3 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/60 text-amber-950 dark:text-amber-100 rounded-xl border border-amber-300 dark:border-amber-800/60 transition">
+                            <div class="flex items-center gap-3">
+                                <div class="p-2 bg-amber-500 text-white rounded-lg">
+                                    <i class="fa-solid fa-vial-circle-check text-base"></i>
+                                </div>
+                                <div>
+                                    <span class="text-xs font-black block leading-tight">CITUC Intoxicaciones / Venenos</span>
+                                    <span class="text-[11px] text-amber-800 dark:text-amber-300">Medicamentos, picaduras, productos de aseo</span>
+                                </div>
+                            </div>
+                            <span class="text-xs font-black bg-amber-600 text-white px-2.5 py-1 rounded-md whitespace-nowrap ml-2">
+                                2 2635 3800
+                            </span>
+                        </a>
+
+                        <a href="tel:+56222473600" class="flex items-center justify-between p-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-900 dark:hover:bg-slate-700/80 text-slate-900 dark:text-slate-100 rounded-xl border border-slate-300 dark:border-slate-700 transition">
+                            <div class="flex items-center gap-3">
+                                <div class="p-2 bg-slate-700 text-white rounded-lg">
+                                    <i class="fa-solid fa-flask text-base"></i>
+                                </div>
+                                <div>
+                                    <span class="text-xs font-black block leading-tight">CITUC Emergencias Químicas</span>
+                                    <span class="text-[11px] text-slate-500 dark:text-slate-400">Derrame de materiales peligrosos y hazmat</span>
+                                </div>
+                            </div>
+                            <span class="text-xs font-black bg-slate-800 dark:bg-slate-700 text-white px-2.5 py-1 rounded-md whitespace-nowrap ml-2">
+                                2 2247 3600
+                            </span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Quick Broadcast Status -->
+            <div class="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+                <h3 class="text-sm font-bold text-slate-800 dark:text-slate-200 mb-2">
+                    <i class="fa-solid fa-share-nodes text-chileBlue"></i> Difusión Veloz de Mi Estado
+                </h3>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mb-3">Envía un mensaje rápido predefinido con tu ubicación actual vía WhatsApp o SMS.</p>
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="shareQuickState('safe')" class="flex-1 min-w-[140px] bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-950 dark:hover:bg-emerald-900 text-emerald-800 dark:text-emerald-200 text-xs font-semibold py-2.5 px-3 rounded-lg border border-emerald-300 dark:border-emerald-800 flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-circle-check text-emerald-600"></i> "Estoy a Salvo"
+                    </button>
+                    <button onclick="shareQuickState('evacuating')" class="flex-1 min-w-[140px] bg-amber-100 hover:bg-amber-200 dark:bg-amber-950 dark:hover:bg-amber-900 text-amber-800 dark:text-amber-200 text-xs font-semibold py-2.5 px-3 rounded-lg border border-amber-300 dark:border-amber-800 flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-person-walking-arrow-right text-amber-600"></i> "Evacuando"
+                    </button>
+                    <button onclick="openCrimeAlertModal()" class="flex-1 min-w-[140px] bg-red-100 hover:bg-red-200 dark:bg-red-950 dark:hover:bg-red-900 text-red-800 dark:text-red-200 text-xs font-semibold py-2.5 px-3 rounded-lg border border-red-300 dark:border-red-800 flex items-center justify-center gap-1.5">
+                        <i class="fa-solid fa-hand-fist text-red-600"></i> "Alerta de Robo / Delito"
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 2: Crime / Anti-Theft Community Network -->
+        <div id="crimeTab" class="tab-content hidden space-y-4">
+            <div class="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+                    <div>
+                        <h2 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                            <i class="fa-solid fa-shield-cat text-orange-600"></i> Red Vecinal de Alerta Antidelito
+                        </h2>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">Emite y consulta alertas comunitarias en tiempo real para asistencia inmediata entre vecinos.</p>
+                    </div>
+                    <button onclick="openCrimeAlertModal()" class="bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs py-2 px-3.5 rounded-lg flex items-center justify-center gap-2 shadow">
+                        <i class="fa-solid fa-bullhorn"></i> Emitir Alerta Vecinal
+                    </button>
+                </div>
+
+                <!-- Emergency Direct Contacts for Crime -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mb-4">
+                    <a href="tel:133" class="p-2.5 bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 rounded-xl flex items-center justify-between text-blue-950 dark:text-blue-200 hover:bg-blue-100 transition">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-shield-cat text-blue-700 dark:text-blue-400 text-lg"></i>
+                            <span class="text-xs font-bold">Carabineros</span>
+                        </div>
+                        <span class="text-xs font-black bg-blue-700 text-white px-2 py-0.5 rounded">133</span>
+                    </a>
+                    <a href="tel:134" class="p-2.5 bg-sky-50 dark:bg-sky-950/50 border border-sky-200 dark:border-sky-800 rounded-xl flex items-center justify-between text-sky-950 dark:text-sky-200 hover:bg-sky-100 transition">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-user-shield text-sky-700 dark:text-sky-400 text-lg"></i>
+                            <span class="text-xs font-bold">PDI Investigaciones</span>
+                        </div>
+                        <span class="text-xs font-black bg-sky-700 text-white px-2 py-0.5 rounded">134</span>
+                    </a>
+                    <a href="tel:1414" class="p-2.5 bg-orange-50 dark:bg-orange-950/50 border border-orange-200 dark:border-orange-800 rounded-xl flex items-center justify-between text-orange-950 dark:text-orange-200 hover:bg-orange-100 transition">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-solid fa-building-shield text-orange-600 dark:text-orange-400 text-lg"></i>
+                            <span class="text-xs font-bold">Seguridad Municipal</span>
+                        </div>
+                        <span class="text-xs font-black bg-orange-600 text-white px-2 py-0.5 rounded">1414</span>
+                    </a>
+                </div>
+
+                <!-- Active Community Crime Feed Header -->
+                <div class="flex items-center justify-between pt-3 border-t border-slate-200 dark:border-slate-700 mb-3">
+                    <h3 class="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wide flex items-center gap-1.5">
+                        <i class="fa-solid fa-satellite-dish text-orange-500 animate-pulse"></i> Incidentes Recientes Reportados en la Comuna
+                    </h3>
+                    <span id="incidentCountBadge" class="text-[11px] bg-orange-100 text-orange-800 dark:bg-orange-950 dark:text-orange-200 font-bold px-2 py-0.5 rounded">3 alertas vivas</span>
+                </div>
+
+                <div id="crimeAlertsList" class="space-y-2.5">
+                    <!-- Dynamic rendering -->
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 3: Nearby Centers & Geolocation Map -->
+        <div id="centersTab" class="tab-content hidden space-y-4">
+            <div class="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                    <div>
+                        <h2 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                            <i class="fa-solid fa-location-crosshairs text-chileBlue"></i> Ubicación y Centros Cercanos
+                        </h2>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">Hospitales, SAPU, CESFAM, Carabineros y Puntos de Evacuación.</p>
+                    </div>
+                    <button onclick="getUserGPSLocation()" class="self-start sm:self-auto text-xs bg-slate-800 dark:bg-slate-700 hover:bg-slate-900 text-white px-3 py-2 rounded-lg font-semibold flex items-center gap-1.5">
+                        <i class="fa-solid fa-arrows-rotate"></i> Actualizar GPS
+                    </button>
+                </div>
+
+                <!-- Simulation/Filter location row -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-3">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Comuna Seleccionada:</label>
+                        <select id="comunaSelector" onchange="changeComunaFilter()" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-xs font-medium focus:ring-2 focus:ring-chileBlue outline-none">
+                            <option value="-33.4489,-70.6693|Santiago Centro">Santiago Centro</option>
+                            <option value="-33.0472,-71.6127|Valparaíso">Valparaíso</option>
+                            <option value="-36.8201,-73.0444|Concepción">Concepción</option>
+                            <option value="-29.9027,-71.2519|La Serena">La Serena</option>
+                            <option value="-23.6509,-70.3975|Antofagasta">Antofagasta</option>
+                            <option value="-38.7359,-72.5904|Temuco">Temuco</option>
+                            <option value="-41.4689,-72.9411|Puerto Montt">Puerto Montt</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Filtrar Recintos:</label>
+                        <select id="centerTypeFilter" onchange="renderCentersList()" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-xs font-medium focus:ring-2 focus:ring-chileBlue outline-none">
+                            <option value="ALL">Todos los Recintos</option>
+                            <option value="HOSPITAL">Hospitales y Urgencias</option>
+                            <option value="SAPU">SAPU / CESFAM</option>
+                            <option value="BOMBEROS">Cuarteles de Bomberos</option>
+                            <option value="CARABINEROS">Comisarías</option>
+                            <option value="ZONA_SEGURA">Puntos Evacuación / Zonas Seguras</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Map Canvas -->
+                <div id="map" class="shadow-inner border border-slate-300 dark:border-slate-700"></div>
+
+                <div class="mt-2 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+                    <span id="locationStatusText"><i class="fa-solid fa-circle-dot text-emerald-500"></i> GPS: Ubicación activa</span>
+                    <span id="centerCountBadge" class="font-bold">0 centros hallados</span>
+                </div>
+            </div>
+
+            <!-- List of Nearby Centers -->
+            <div id="centersListContainer" class="space-y-2">
+                <!-- Dynamically populated -->
+            </div>
+        </div>
+
+        <!-- TAB 4: SENAPRED Alerts and Threat Management -->
+        <div id="senapredTab" class="tab-content hidden space-y-4">
+            <div class="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+                <div class="flex items-center justify-between mb-3">
+                    <h2 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                        <i class="fa-solid fa-triangle-exclamation text-senapredRed"></i> Estado Oficial de Alertas SENAPRED
+                    </h2>
+                    <span class="text-xs bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-2.5 py-1 rounded-md font-semibold">Chile</span>
+                </div>
+
+                <!-- Active Alert Cards Grid -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3" id="alertsGrid">
+                    <!-- Populated via JS -->
+                </div>
+            </div>
+
+            <!-- Threat Type Selector & Recommendations -->
+            <div class="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+                <h3 class="text-sm font-bold text-slate-800 dark:text-slate-200 mb-2 flex items-center gap-2">
+                    <i class="fa-solid fa-book-medical text-chileBlue"></i> Protocolos de Prevención y Respuesta Rápida
+                </h3>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mb-3">Selecciona una amenaza territorial para desplegar las medidas inmediatas sugeridas por SENAPRED.</p>
+
+                <div class="flex flex-wrap gap-1.5 mb-4" id="threatButtonsGroup">
+                    <button onclick="showProtocol('sismo')" class="protocol-btn bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-chileBlue hover:text-white text-xs font-semibold py-1.5 px-3 rounded-lg transition">Sismo / Terremoto</button>
+                    <button onclick="showProtocol('tsunami')" class="protocol-btn bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-chileBlue hover:text-white text-xs font-semibold py-1.5 px-3 rounded-lg transition">Tsunami / Marejadas</button>
+                    <button onclick="showProtocol('incendio')" class="protocol-btn bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-chileBlue hover:text-white text-xs font-semibold py-1.5 px-3 rounded-lg transition">Incendio Forestal</button>
+                    <button onclick="showProtocol('volcan')" class="protocol-btn bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-chileBlue hover:text-white text-xs font-semibold py-1.5 px-3 rounded-lg transition">Erupción Volcánica</button>
+                    <button onclick="showProtocol('inundacion')" class="protocol-btn bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 hover:bg-chileBlue hover:text-white text-xs font-semibold py-1.5 px-3 rounded-lg transition">Temporal / Aluvión</button>
+                </div>
+
+                <!-- Displayed Protocol Detail Card -->
+                <div id="protocolDetailBox" class="p-3.5 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700">
+                    <!-- Populated via JS -->
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 5: Friends & Family Protection Circle -->
+        <div id="friendsTab" class="tab-content hidden space-y-4">
+            <div class="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+                <h2 class="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2 mb-1">
+                    <i class="fa-solid fa-users-gear text-chileBlue"></i> Mi Círculo de Protección Familiar
+                </h2>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">Guarda contactos directos de confianza para avisarles de inmediato en situaciones de emergencia o delitos.</p>
+
+                <!-- Add Contact Form -->
+                <form id="addContactForm" onsubmit="saveNewContact(event)" class="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-4 bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-200 dark:border-slate-700">
+                    <input type="text" id="contactName" placeholder="Nombre (Ej: Mamá, Juan)" required class="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg p-2 text-xs focus:outline-none focus:ring-2 focus:ring-chileBlue">
+                    <input type="tel" id="contactPhone" placeholder="+56912345678" required class="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg p-2 text-xs focus:outline-none focus:ring-2 focus:ring-chileBlue">
+                    <button type="submit" class="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs py-2 px-3 rounded-lg transition flex items-center justify-center gap-1">
+                        <i class="fa-solid fa-user-plus"></i> Agregar Contacto
+                    </button>
+                </form>
+
+                <!-- Saved Contacts List -->
+                <div class="space-y-2" id="contactsList">
+                    <!-- Dynamic rendering -->
+                </div>
+            </div>
+
+            <!-- Status Customization Panel -->
+            <div class="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+                <h3 class="text-sm font-bold text-slate-800 dark:text-slate-200 mb-2">
+                    <i class="fa-solid fa-message text-emerald-600"></i> Formato de Mensaje de Emergencia
+                </h3>
+                <p class="text-xs text-slate-500 dark:text-slate-400 mb-2">Este texto se adjuntará con tus coordenadas GPS actuales al notificar a tu red.</p>
+                <div class="p-3 bg-slate-100 dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-700 font-mono text-xs text-slate-700 dark:text-slate-300 leading-relaxed" id="previewMsgBox">
+                    ALERTA RESCATE CHILE: [Mi Estado]. Me encuentro cerca de [Comuna]. Coordenadas: [Lat, Lng].
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Crime Emergency Modal -->
+    <div id="crimeModal" class="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-slate-800 rounded-2xl max-w-md w-full p-5 shadow-2xl border border-red-500/30">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-700">
+                <div class="flex items-center gap-2">
+                    <div class="p-2 bg-orange-600 text-white rounded-xl">
+                        <i class="fa-solid fa-triangle-exclamation text-xl"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-black text-base text-slate-900 dark:text-white leading-tight">ALERTA COMUNITARIA ROBO / DELITO</h3>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">Emisión inmediata a red de protección</p>
+                    </div>
+                </div>
+                <button onclick="closeCrimeAlertModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200">
+                    <i class="fa-solid fa-xmark text-xl"></i>
+                </button>
+            </div>
+
+            <div class="py-4 space-y-3">
+                <label class="block text-xs font-bold text-slate-700 dark:text-slate-300 uppercase">Selecciona el tipo de evento:</label>
+                <div class="grid grid-cols-2 gap-2" id="crimeTypeButtons">
+                    <button onclick="selectCrimeType('ROBO / ASALTO')" class="crime-type-btn active bg-orange-100 border-2 border-orange-600 text-orange-950 font-bold p-2.5 rounded-xl text-xs flex items-center gap-2">
+                        <i class="fa-solid fa-hand-fist text-orange-600"></i> Robo / Asalto
+                    </button>
+                    <button onclick="selectCrimeType('PORTONAZO / ENCERRONA')" class="crime-type-btn bg-slate-100 border-2 border-slate-200 text-slate-800 font-bold p-2.5 rounded-xl text-xs flex items-center gap-2">
+                        <i class="fa-solid fa-car-burst text-red-600"></i> Portonazo
+                    </button>
+                    <button onclick="selectCrimeType('SOSPECHOSO EN PROPIEDAD')" class="crime-type-btn bg-slate-100 border-2 border-slate-200 text-slate-800 font-bold p-2.5 rounded-xl text-xs flex items-center gap-2">
+                        <i class="fa-solid fa-user-ninja text-amber-600"></i> Intruso
+                    </button>
+                    <button onclick="selectCrimeType('ACOSO / AMENAZA')" class="crime-type-btn bg-slate-100 border-2 border-slate-200 text-slate-800 font-bold p-2.5 rounded-xl text-xs flex items-center gap-2">
+                        <i class="fa-solid fa-person-shelter text-purple-600"></i> Acoso / Riesgo
+                    </button>
+                </div>
+
+                <div class="p-3 bg-slate-100 dark:bg-slate-900 rounded-xl text-xs space-y-1 font-mono">
+                    <div class="text-slate-500">Ubicación a enviar:</div>
+                    <div class="font-bold text-slate-800 dark:text-slate-200" id="modalLocationPreview"><i class="fa-solid fa-spinner animate-spin"></i> Obteniendo posición GPS...</div>
+                </div>
+
+                <!-- Emergency Fast Dial Buttons -->
+                <div class="grid grid-cols-3 gap-2">
+                    <a href="tel:133" class="bg-blue-700 hover:bg-blue-800 text-white p-2 rounded-xl text-center text-xs font-bold flex flex-col items-center justify-center">
+                        <i class="fa-solid fa-phone text-sm mb-1"></i> Carabineros 133
+                    </a>
+                    <a href="tel:134" class="bg-sky-700 hover:bg-sky-800 text-white p-2 rounded-xl text-center text-xs font-bold flex flex-col items-center justify-center">
+                        <i class="fa-solid fa-phone text-sm mb-1"></i> PDI 134
+                    </a>
+                    <a href="tel:1414" class="bg-orange-600 hover:bg-orange-700 text-white p-2 rounded-xl text-center text-xs font-bold flex flex-col items-center justify-center">
+                        <i class="fa-solid fa-phone text-sm mb-1"></i> Seguridad 1414
+                    </a>
+                </div>
+            </div>
+
+            <div class="pt-2 flex flex-col gap-2">
+                <button onclick="broadcastCrimeAlertWhatsApp()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-sm py-3 px-4 rounded-xl flex items-center justify-center gap-2 shadow-md transition">
+                    <i class="fa-brands fa-whatsapp text-lg"></i> ENVIAR ALERTA URGENTE POR WHATSAPP
+                </button>
+                <button onclick="broadcastCrimeAlertSMS()" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-semibold text-xs py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition">
+                    <i class="fa-solid fa-comment-sms"></i> Notificar por SMS
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating Emergency Footer -->
+    <footer class="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-slate-900/95 backdrop-blur border-t border-slate-200 dark:border-slate-800 py-2.5 px-4 z-40">
+        <div class="max-w-4xl mx-auto flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+                <span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span class="font-medium hidden sm:inline">Sistema Operativo</span>
+                <span class="text-slate-400">| SENAPRED & Red Vecinal</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <button onclick="openCrimeAlertModal()" class="bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs py-2 px-3 rounded-lg flex items-center gap-1.5 shadow-sm transition">
+                    <i class="fa-solid fa-hand-fist"></i> Alerta Delito
+                </button>
+                <button onclick="shareAllNetworkWhatsApp()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2 px-3.5 rounded-lg flex items-center gap-1.5 shadow-sm transition">
+                    <i class="fa-brands fa-whatsapp text-sm"></i> Avisar Red
+                </button>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Global State
+        let userCoords = { lat: -33.4489, lng: -70.6693, name: "Santiago Centro" };
+        let mapInstance = null;
+        let mapMarkers = [];
+        let selectedCrimeType = 'ROBO / ASALTO';
+
+        let savedContacts = JSON.parse(localStorage.getItem('rescue_contacts')) || [
+            { id: 1, name: "Mamá / Contacto Familiar", phone: "+56912345678" },
+            { id: 2, name: "Grupo Vecinal de Seguridad", phone: "+56987654321" }
+        ];
+
+        // Active Crime Alerts dataset (Simulated community feed)
+        let activeCrimeAlerts = [
+            { id: 101, type: "ROBO / ASALTO", location: "Av. España con Sazié, Santiago Centro", lat: -33.4502, lng: -70.6680, time: "Hace 5 minutos", status: "En Verificación Policial", count: 4 },
+            { id: 102, type: "PORTONAZO / ENCERRONA", location: "Sector Cerro Cordillera, Valparaíso", lat: -33.0560, lng: -71.6240, time: "Hace 22 minutos", status: "Carabineros Informado", count: 8 },
+            { id: 103, type: "ACOSO / AMENAZA", location: "Plaza de Armas, Santiago", lat: -33.4378, lng: -70.6504, time: "Hace 40 minutos", status: "Atendido por Seguridad Municipal", count: 2 }
+        ];
+
+        // Datasets for Centers
+        const assistanceCenters = [
+            // CITUC Centrales
+            { name: "CITUC Intoxicaciones UC (Casa Central)", type: "HOSPITAL", phone: "+56226353800", lat: -33.4410, lng: -70.6405, comuna: "Santiago Centro", address: "Av. Libertador Bernardo O'Higgins 340" },
+            { name: "CITUC Emergencias Químicas Hazmat UC", type: "HOSPITAL", phone: "+56222473600", lat: -33.4412, lng: -70.6402, comuna: "Santiago Centro", address: "Av. Libertador Bernardo O'Higgins 340" },
+
+            // Santiago
+            { name: "Hospital Urgencia Asistencia Pública (HUAP - Posta Central)", type: "HOSPITAL", phone: "+56225681100", lat: -33.4447, lng: -70.6433, comuna: "Santiago Centro", address: "Av. Portugal 125" },
+            { name: "Hospital San Borja Arriarán", type: "HOSPITAL", phone: "+56225748900", lat: -33.4578, lng: -70.6430, comuna: "Santiago Centro", address: "Santa Rosa 1234" },
+            { name: "1ª Compañía de Bomberos de Santiago", type: "BOMBEROS", phone: "132", lat: -33.4385, lng: -70.6510, comuna: "Santiago Centro", address: "Paseo Puente 820" },
+            { name: "1ª Comisaría Carabineros Santiago Central", type: "CARABINEROS", phone: "133", lat: -33.4430, lng: -70.6580, comuna: "Santiago Centro", address: "Santo Domingo 961" },
+            { name: "Zona Segura - Parque O'Higgins", type: "ZONA_SEGURA", phone: "138", lat: -33.4650, lng: -70.6600, comuna: "Santiago Centro", address: "Explanada Central" },
+            { name: "CESFAM Doctor Domeyko", type: "SAPU", phone: "+56225748000", lat: -33.4501, lng: -70.6670, comuna: "Santiago Centro", address: "Cueto 543" },
+
+            // Valparaíso
+            { name: "Hospital Carlos Van Buren", type: "HOSPITAL", phone: "+56322364000", lat: -33.0489, lng: -71.6105, comuna: "Valparaíso", address: "San Martín 1270" },
+            { name: "SAPU Reina Isabel II", type: "SAPU", phone: "+56322281200", lat: -33.0550, lng: -71.6230, comuna: "Valparaíso", address: "Cerro Cordillera" },
+            { name: "Cuerpo de Bomberos Valparaíso (Central)", type: "BOMBEROS", phone: "132", lat: -33.0440, lng: -71.6210, comuna: "Valparaíso", address: "Plaza Sotomayor" },
+            { name: "Cota 30 Zona de Evacuación Tsunami - Plaza Victoria", type: "ZONA_SEGURA", phone: "137", lat: -33.0460, lng: -71.6190, comuna: "Valparaíso", address: "Av. Pedro Montt" },
+
+            // Concepción
+            { name: "Hospital Clínico Guillermo Grant Benavente", type: "HOSPITAL", phone: "+56412722000", lat: -36.8242, lng: -73.0428, comuna: "Concepción", address: "San Martín 1436" },
+            { name: "3ª Compañía Bomberos Concepción", type: "BOMBEROS", phone: "132", lat: -36.8280, lng: -73.0510, comuna: "Concepción", address: "Av. Chacabuco" }
+        ];
+
+        // Datasets for SENAPRED Alerts
+        const senapredAlerts = [
+            { id: 1, type: "Alerta Roja", region: "Región de Valparaíso & RM", title: "Incendio Forestal", desc: "Comunas en observación de evacuación preventiva. Mantener equipos cargados.", time: "Hace 15 min", color: "red" },
+            { id: 2, type: "Alerta Amarilla", region: "Región de Coquimbo a Los Ríos", title: "Evento Hidrometeorológico", desc: "Vientos moderados a fuertes y precipitaciones concentradas en precordillera.", time: "Hace 1 hora", color: "yellow" },
+            { id: 3, type: "Alerta Temprana Preventiva", region: "Zona Costera Nacional", title: "Marejadas Anormales", desc: "Se solicita evitar el acercamiento al borde costero y roqueríos.", time: "Hace 3 horas", color: "green" },
+            { id: 4, type: "Alerta Amarilla", region: "Región de La Araucanía", title: "Actividad Volcánica Villarrica", desc: "Perímetro de seguridad de 500m en torno al cráter activo.", time: "Hace 5 horas", color: "yellow" }
+        ];
+
+        // Protocols dataset
+        const protocolsData = {
+            sismo: {
+                title: "Sismo o Terremoto de Gran Magnitud",
+                steps: [
+                    "Mantén la calma y ubícate en una Zona de Protección de Seguridad.",
+                    "Aléjate de ventanas, espejos, muebles pesados u objetos que puedan caer.",
+                    "Si estás en la vía pública, aléjate de edificios, postes de luz y cables.",
+                    "Finalizado el movimiento, si estás en zona costera y no puedes mantenerte en pie, evacúa de inmediato hacia la Cota 30."
+                ]
+            },
+            tsunami: {
+                title: "Evacuación por Tsunami / Marejadas",
+                steps: [
+                    "Si sientes un sismo fuerte que dificulte mantenerte en pie en zona costera, no esperes la sirena: EVACÚA.",
+                    "Dirígete a pie rápidamente hacia zonas sobre la Cota 30 (30 metros sobre el nivel del mar).",
+                    "No utilices vehículos para no colapsar las vías de evacuación.",
+                    "Lleva tu kit de emergencia de bolsillo y no retornes hasta la orden oficial de SENAPRED."
+                ]
+            },
+            incendio: {
+                title: "Incendio Forestal / Interfaz",
+                steps: [
+                    "Si SENAPRED envía alerta SAE a tu celular, evacúa inmediatamente la zona señalada.",
+                    "Cubre tu boca y nariz con un paño húmedo para evitar inhalar humo.",
+                    "Cierra ventanas, puertas y corta el suministro de gas central.",
+                    "Viste ropa gruesa de manguera larga que cubra la piel y sigue las instrucciones de Bomberos y Carabineros."
+                ]
+            },
+            volcan: {
+                title: "Erupción Volcánica / Caída de Ceniza",
+                steps: [
+                    "Respeta strictly el perímetro de exclusión fijado por SENAPRED y SERNAGEOMIN.",
+                    "Usa mascarilla N95 o paño húmedo para proteger las vías respiratorias de la ceniza.",
+                    "Protege tus ojos con anteojos o antiparras y cubre depósitos de agua potable.",
+                    "Mantente informado únicamente por canales oficiales radiofónicos o de emergencia."
+                ]
+            },
+            inundacion: {
+                title: "Temporal, Aluvión e Inundación",
+                steps: [
+                    "Desconecta la energía eléctrica principal si hay riesgo de ingreso de agua a la vivienda.",
+                    "No cruces a pie ni en vehículo cursos de agua o calles inundadas con corriente.",
+                    "Si vives en quebrada o ladera y escuchas ruidos de arrastre de rocas/barro, evacúa de inmediato hacia zonas altas.",
+                    "Sigue las vías de evacuación demarcadas por el municipio."
+                ]
+            }
+        };
+
+        window.onload = function() {
+            initMap();
+            renderCentersList();
+            renderSenapredAlerts();
+            renderCrimeAlerts();
+            showProtocol('sismo');
+            renderContacts();
+            
+            getUserGPSLocation();
+            registerServiceWorker();
+        };
+
+        function registerServiceWorker() {
+            if ('serviceWorker' in navigator) {
+                const swCode = `
+                    self.addEventListener('install', (e) => self.skipWaiting());
+                    self.addEventListener('activate', (e) => self.clients.claim());
+                    self.addEventListener('fetch', (e) => e.respondWith(fetch(e.request).catch(() => new Response('Modo Offline Activo'))));
+                `;
+                const blob = new Blob([swCode], { type: 'text/javascript' });
+                const swUrl = URL.createObjectURL(blob);
+                navigator.serviceWorker.register(swUrl).catch(err => console.log('SW registration failed:', err));
+            }
+        }
+
+        function initMap() {
+            mapInstance = L.map('map').setView([userCoords.lat, userCoords.lng], 13);
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                maxZoom: 18,
+                attribution: '© OpenStreetMap'
+            }).addTo(mapInstance);
+        }
+
+        function getUserGPSLocation() {
+            const statusEl = document.getElementById('locationStatusText');
+            if (navigator.geolocation) {
+                statusEl.innerHTML = `<i class="fa-solid fa-spinner animate-spin text-amber-500"></i> Obteniendo GPS...`;
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        userCoords.lat = position.coords.latitude;
+                        userCoords.lng = position.coords.longitude;
+                        userCoords.name = "Ubicación GPS Actual";
+                        statusEl.innerHTML = `<i class="fa-solid fa-circle-dot text-emerald-500"></i> GPS En vivo (+/- ${Math.round(position.coords.accuracy)}m)`;
+                        
+                        document.getElementById('modalLocationPreview').innerText = `${userCoords.lat.toFixed(4)}, ${userCoords.lng.toFixed(4)} (${userCoords.name})`;
+                        updateMapAndCenters();
+                    },
+                    (error) => {
+                        statusEl.innerHTML = `<i class="fa-solid fa-triangle-exclamation text-amber-500"></i> GPS No disponible (Usando Comuna)`;
+                        document.getElementById('modalLocationPreview').innerText = `${userCoords.lat.toFixed(4)}, ${userCoords.lng.toFixed(4)} (${userCoords.name})`;
+                        changeComunaFilter();
+                    },
+                    { enableHighAccuracy: true, timeout: 8000 }
+                );
+            } else {
+                statusEl.innerHTML = `<i class="fa-solid fa-circle-xmark text-red-500"></i> Navegador sin GPS`;
+                changeComunaFilter();
+            }
+        }
+
+        function changeComunaFilter() {
+            const selector = document.getElementById('comunaSelector');
+            const val = selector.value.split('|');
+            const coords = val[0].split(',');
+            userCoords.lat = parseFloat(coords[0]);
+            userCoords.lng = parseFloat(coords[1]);
+            userCoords.name = val[1];
+
+            document.getElementById('modalLocationPreview').innerText = `${userCoords.lat.toFixed(4)}, ${userCoords.lng.toFixed(4)} (${userCoords.name})`;
+            updateMapAndCenters();
+        }
+
+        function updateMapAndCenters() {
+            if (!mapInstance) return;
+
+            mapInstance.setView([userCoords.lat, userCoords.lng], 13);
+
+            mapMarkers.forEach(marker => mapInstance.removeLayer(marker));
+            mapMarkers = [];
+
+            // Add user pin
+            const userMarker = L.circleMarker([userCoords.lat, userCoords.lng], {
+                radius: 9,
+                fillColor: '#0039a6',
+                color: '#ffffff',
+                weight: 3,
+                opacity: 1,
+                fillOpacity: 0.9
+            }).addTo(mapInstance).bindPopup(`<b>${userCoords.name}</b><br>Tus coordenadas`);
+            mapMarkers.push(userMarker);
+
+            // Add crime pins to map
+            activeCrimeAlerts.forEach(crime => {
+                const crimeMarker = L.circleMarker([crime.lat, crime.lng], {
+                    radius: 8,
+                    fillColor: '#ea580c',
+                    color: '#ffffff',
+                    weight: 2,
+                    opacity: 1,
+                    fillOpacity: 0.9
+                }).addTo(mapInstance).bindPopup(`<b>🚨 ALERTA DELITO: ${crime.type}</b><br>${crime.location}<br><i>${crime.time}</i>`);
+                mapMarkers.push(crimeMarker);
+            });
+
+            renderCentersList();
+        }
+
+        function calculateDistanceKm(lat1, lon1, lat2, lon2) {
+            const R = 6371;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return (R * c).toFixed(1);
+        }
+
+        function renderCentersList() {
+            const container = document.getElementById('centersListContainer');
+            const filterType = document.getElementById('centerTypeFilter').value;
+            container.innerHTML = '';
+
+            let filtered = assistanceCenters.map(center => {
+                const dist = calculateDistanceKm(userCoords.lat, userCoords.lng, center.lat, center.lng);
+                return { ...center, distance: parseFloat(dist) };
+            });
+
+            if (filterType !== 'ALL') {
+                filtered = filtered.filter(c => c.type === filterType);
+            }
+
+            filtered.sort((a, b) => a.distance - b.distance);
+
+            document.getElementById('centerCountBadge').innerText = `${filtered.length} recintos encontrados`;
+
+            filtered.forEach(center => {
+                let markerColor = '#dc2626';
+                if (center.type === 'CARABINEROS') markerColor = '#1d4ed8';
+                if (center.type === 'BOMBEROS') markerColor = '#b91c1c';
+                if (center.type === 'ZONA_SEGURA') markerColor = '#059669';
+
+                if (mapInstance) {
+                    const m = L.circleMarker([center.lat, center.lng], {
+                        radius: 7,
+                        fillColor: markerColor,
+                        color: '#ffffff',
+                        weight: 2,
+                        opacity: 1,
+                        fillOpacity: 0.8
+                    }).addTo(mapInstance).bindPopup(`<b>${center.name}</b><br>${center.address}<br>Tel: ${center.phone}`);
+                    mapMarkers.push(m);
+                }
+
+                let badgeClass = "bg-red-100 text-red-800 dark:bg-red-900/50 dark:text-red-200";
+                let iconClass = "fa-hospital";
+                if (center.type === 'CARABINEROS') { badgeClass = "bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-200"; iconClass = "fa-shield-cat"; }
+                if (center.type === 'BOMBEROS') { badgeClass = "bg-orange-100 text-orange-800 dark:bg-orange-900/50 dark:text-orange-200"; iconClass = "fa-fire-extinguisher"; }
+                if (center.type === 'ZONA_SEGURA') { badgeClass = "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200"; iconClass = "fa-person-shelter"; }
+
+                const card = document.createElement('div');
+                card.className = "bg-white dark:bg-slate-800 p-3 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm hover:shadow transition";
+                card.innerHTML = `
+                    <div class="flex items-start gap-3">
+                        <div class="p-2.5 rounded-xl ${badgeClass} shrink-0 mt-0.5">
+                            <i class="fa-solid ${iconClass} text-lg"></i>
+                        </div>
+                        <div>
+                            <div class="flex items-center gap-2 flex-wrap">
+                                <h4 class="font-bold text-sm text-slate-900 dark:text-white leading-tight">${center.name}</h4>
+                                <span class="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${badgeClass}">${center.type}</span>
+                            </div>
+                            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1"><i class="fa-solid fa-location-dot"></i> ${center.address}, ${center.comuna}</p>
+                            <span class="inline-block mt-1 text-xs font-semibold text-chileBlue dark:text-blue-400">
+                                <i class="fa-solid fa-route"></i> A ${center.distance} km de ti
+                            </span>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-2 shrink-0 border-t sm:border-t-0 pt-2 sm:pt-0 border-slate-100 dark:border-slate-700">
+                        <a href="tel:${center.phone}" class="flex-1 sm:flex-initial bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 py-2 rounded-lg flex items-center justify-center gap-1.5 transition">
+                            <i class="fa-solid fa-phone"></i> Llamar
+                        </a>
+                        <button onclick="openExternalMap(${center.lat}, ${center.lng})" class="flex-1 sm:flex-initial bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-semibold text-xs px-3 py-2 rounded-lg flex items-center justify-center gap-1.5 transition">
+                            <i class="fa-solid fa-diamond-turn-right"></i> Ir
+                        </button>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function renderCrimeAlerts() {
+            const list = document.getElementById('crimeAlertsList');
+            list.innerHTML = '';
+
+            document.getElementById('incidentCountBadge').innerText = `${activeCrimeAlerts.length} alertas vivas`;
+
+            activeCrimeAlerts.forEach(alert => {
+                const item = document.createElement('div');
+                item.className = "p-3.5 bg-orange-50/60 dark:bg-orange-950/30 border-l-4 border-orange-600 border-y border-r border-orange-200 dark:border-orange-800/60 rounded-xl shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3";
+                item.innerHTML = `
+                    <div>
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-orange-600 text-white">${alert.type}</span>
+                            <span class="text-[11px] text-slate-400 font-medium">${alert.time}</span>
+                        </div>
+                        <h4 class="font-bold text-sm text-slate-900 dark:text-white"><i class="fa-solid fa-location-dot text-orange-600"></i> ${alert.location}</h4>
+                        <p class="text-xs text-slate-600 dark:text-slate-300 mt-1"><i class="fa-solid fa-shield-halved text-blue-600"></i> Estado: <b>${alert.status}</b></p>
+                    </div>
+                    <div class="flex items-center gap-2 shrink-0">
+                        <button onclick="supportCrimeAlert(${alert.id})" class="bg-orange-600 hover:bg-orange-700 text-white font-bold text-xs py-2 px-3 rounded-lg flex items-center gap-1">
+                            <i class="fa-solid fa-hand-holding-hand"></i> Confirmar / Apoyar (${alert.count})
+                        </button>
+                    </div>
+                `;
+                list.appendChild(item);
+            });
+        }
+
+        function supportCrimeAlert(id) {
+            const alert = activeCrimeAlerts.find(a => a.id === id);
+            if (alert) {
+                alert.count += 1;
+                renderCrimeAlerts();
+            }
+        }
+
+        function openExternalMap(lat, lng) {
+            window.open(`https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`, '_blank');
+        }
+
+        function renderSenapredAlerts() {
+            const grid = document.getElementById('alertsGrid');
+            grid.innerHTML = '';
+
+            senapredAlerts.forEach(alert => {
+                let badgeBg = "bg-red-600 text-white";
+                let borderCol = "border-red-500";
+                if (alert.color === 'yellow') { badgeBg = "bg-yellow-500 text-slate-900"; borderCol = "border-yellow-500"; }
+                if (alert.color === 'green') { badgeBg = "bg-emerald-600 text-white"; borderCol = "border-emerald-500"; }
+
+                const item = document.createElement('div');
+                item.className = `p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border-l-4 ${borderCol} border-y border-r border-slate-200 dark:border-slate-700/70 shadow-sm`;
+                item.innerHTML = `
+                    <div class="flex items-center justify-between mb-1.5">
+                        <span class="text-[10px] font-black uppercase px-2 py-0.5 rounded ${badgeBg}">${alert.type}</span>
+                        <span class="text-[11px] text-slate-400 font-medium">${alert.time}</span>
+                    </div>
+                    <h4 class="font-bold text-sm text-slate-900 dark:text-white">${alert.title}</h4>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-0.5 font-medium"><i class="fa-solid fa-map-pin text-chileRed"></i> ${alert.region}</p>
+                    <p class="text-xs text-slate-600 dark:text-slate-300 mt-2 leading-relaxed">${alert.desc}</p>
+                `;
+                grid.appendChild(item);
+            });
+        }
+
+        function showProtocol(key) {
+            const data = protocolsData[key];
+            if (!data) return;
+
+            const box = document.getElementById('protocolDetailBox');
+            let stepsHTML = data.steps.map((step, idx) => `
+                <li class="flex items-start gap-2.5 text-xs text-slate-700 dark:text-slate-300">
+                    <span class="shrink-0 w-5 h-5 rounded-full bg-chileBlue text-white text-[11px] font-bold flex items-center justify-center">${idx + 1}</span>
+                    <span>${step}</span>
+                </li>
+            `).join('');
+
+            box.innerHTML = `
+                <h4 class="font-bold text-sm text-slate-900 dark:text-white mb-3 flex items-center gap-2">
+                    <i class="fa-solid fa-circle-info text-chileBlue"></i> Protocolo Oficial: ${data.title}
+                </h4>
+                <ul class="space-y-2.5">${stepsHTML}</ul>
+            `;
+        }
+
+        function renderContacts() {
+            const list = document.getElementById('contactsList');
+            list.innerHTML = '';
+
+            if (savedContacts.length === 0) {
+                list.innerHTML = `<p class="text-xs text-slate-400 text-center py-4">No has agregado contactos de emergencia aún.</p>`;
+                return;
+            }
+
+            savedContacts.forEach(c => {
+                const item = document.createElement('div');
+                item.className = "flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700";
+                item.innerHTML = `
+                    <div>
+                        <h4 class="font-bold text-xs text-slate-900 dark:text-white">${c.name}</h4>
+                        <p class="text-xs text-slate-500 dark:text-slate-400 font-mono">${c.phone}</p>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <button onclick="sendSingleWhatsApp('${c.phone}')" class="bg-emerald-600 hover:bg-emerald-700 text-white p-2 rounded-lg text-xs" title="Enviar WhatsApp">
+                            <i class="fa-brands fa-whatsapp text-sm"></i>
+                        </button>
+                        <button onclick="sendSMS('${c.phone}')" class="bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-lg text-xs" title="Enviar SMS">
+                            <i class="fa-solid fa-comment-sms text-sm"></i>
+                        </button>
+                        <button onclick="deleteContact(${c.id})" class="bg-red-100 dark:bg-red-950 hover:bg-red-200 text-red-600 p-2 rounded-lg text-xs" title="Eliminar">
+                            <i class="fa-solid fa-trash-can"></i>
+                        </button>
+                    </div>
+                `;
+                list.appendChild(item);
+            });
+        }
+
+        function saveNewContact(e) {
+            e.preventDefault();
+            const nameInput = document.getElementById('contactName');
+            const phoneInput = document.getElementById('contactPhone');
+
+            const newC = {
+                id: Date.now(),
+                name: nameInput.value.trim(),
+                phone: phoneInput.value.trim()
+            };
+
+            savedContacts.push(newC);
+            localStorage.setItem('rescue_contacts', JSON.stringify(savedContacts));
+            nameInput.value = '';
+            phoneInput.value = '';
+            renderContacts();
+        }
+
+        function deleteContact(id) {
+            savedContacts = savedContacts.filter(c => c.id !== id);
+            localStorage.setItem('rescue_contacts', JSON.stringify(savedContacts));
+            renderContacts();
+        }
+
+        function openCrimeAlertModal() {
+            document.getElementById('crimeModal').classList.remove('hidden');
+        }
+
+        function closeCrimeAlertModal() {
+            document.getElementById('crimeModal').classList.add('hidden');
+        }
+
+        function selectCrimeType(type) {
+            selectedCrimeType = type;
+            document.querySelectorAll('.crime-type-btn').forEach(btn => {
+                btn.className = "crime-type-btn bg-slate-100 border-2 border-slate-200 text-slate-800 font-bold p-2.5 rounded-xl text-xs flex items-center gap-2";
+            });
+            event.currentTarget.className = "crime-type-btn active bg-orange-100 border-2 border-orange-600 text-orange-950 font-bold p-2.5 rounded-xl text-xs flex items-center gap-2";
+        }
+
+        function generateCrimeText() {
+            const mapLink = `https://maps.google.com/?q=${userCoords.lat},${userCoords.lng}`;
+            return `🚨 ALERTA DE SEGURIDAD VECINAL 🚨\nEvento: ${selectedCrimeType}\nComuna/Lugar: ${userCoords.name}\nCoordenadas GPS: ${mapLink}\n¡Por favor prestar atención / asistencia! (App Rescate Chile)`;
+        }
+
+        function broadcastCrimeAlertWhatsApp() {
+            const text = generateCrimeText();
+            const encoded = encodeURIComponent(text);
+
+            // Register event into live community list
+            const newAlert = {
+                id: Date.now(),
+                type: selectedCrimeType,
+                location: userCoords.name,
+                lat: userCoords.lat,
+                lng: userCoords.lng,
+                time: "Ahora mismo",
+                status: "Emitida por usuario",
+                count: 1
+            };
+            activeCrimeAlerts.unshift(newAlert);
+            renderCrimeAlerts();
+            updateMapAndCenters();
+
+            closeCrimeAlertModal();
+
+            if (navigator.share) {
+                navigator.share({ title: 'ALERTA DE SEGURIDAD', text: text }).catch(() => {
+                    window.open(`https://api.whatsapp.com/send?text=${encoded}`, '_blank');
+                });
+            } else {
+                window.open(`https://api.whatsapp.com/send?text=${encoded}`, '_blank');
+            }
+        }
+
+        function broadcastCrimeAlertSMS() {
+            const text = encodeURIComponent(generateCrimeText());
+            closeCrimeAlertModal();
+            window.open(`sms:?body=${text}`, '_self');
+        }
+
+        function generateEmergencyText(statusType) {
+            let statusText = "ESTOY A SALVO";
+            if (statusType === 'evacuating') statusText = "ESTOY EVACUANDO";
+            if (statusType === 'danger') statusText = "NECESITO ASISTENCIA DE URGENCIA";
+
+            const mapLink = `https://maps.google.com/?q=${userCoords.lat},${userCoords.lng}`;
+            return `🚨 ALERTA RESCATE CHILE 🚨\nEstado: ${statusText}\nUbicación: ${userCoords.name}\nCoordenadas: ${mapLink}\n(Enviado vía App de Emergencias Chile)`;
+        }
+
+        function shareQuickState(type) {
+            const text = generateEmergencyText(type);
+            const encoded = encodeURIComponent(text);
+            
+            if (navigator.share) {
+                navigator.share({
+                    title: 'Estado de Emergencia',
+                    text: text
+                }).catch(() => {
+                    window.open(`https://api.whatsapp.com/send?text=${encoded}`, '_blank');
+                });
+            } else {
+                window.open(`https://api.whatsapp.com/send?text=${encoded}`, '_blank');
+            }
+        }
+
+        function sendSingleWhatsApp(phone) {
+            const cleanPhone = phone.replace(/[^\d+]/g, '');
+            const text = encodeURIComponent(generateEmergencyText('safe'));
+            window.open(`https://api.whatsapp.com/send?phone=${cleanPhone}&text=${text}`, '_blank');
+        }
+
+        function sendSMS(phone) {
+            const cleanPhone = phone.replace(/[^\d+]/g, '');
+            const text = encodeURIComponent(generateEmergencyText('safe'));
+            window.open(`sms:${cleanPhone}?body=${text}`, '_self');
+        }
+
+        function shareAllNetworkWhatsApp() {
+            if (savedContacts.length === 0) {
+                alert("Primero agrega contactos en la pestaña 'Red Familia'.");
+                switchTab('friendsTab');
+                return;
+            }
+            shareQuickState('safe');
+        }
+
+        function triggerEmergencySOS() {
+            const confirmSOS = window.confirm("¿Deseas discar inmediatamente al 131 (SAMU Urgencia Médica)?");
+            if (confirmSOS) {
+                window.location.href = "tel:131";
+            }
+        }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.getElementById(tabId).classList.remove('hidden');
+
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.className = "tab-btn flex-1 py-2.5 px-2 text-center rounded-lg text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition flex items-center justify-center gap-1.5 whitespace-nowrap";
+            });
+
+            const activeBtn = document.getElementById(`nav-${tabId}`);
+            if (activeBtn) {
+                activeBtn.className = "tab-btn flex-1 py-2.5 px-2 text-center rounded-lg bg-chileBlue text-white font-bold transition flex items-center justify-center gap-1.5 shadow-sm whitespace-nowrap";
+            }
+
+            if (tabId === 'centersTab' && mapInstance) {
+                setTimeout(() => {
+                    mapInstance.invalidateSize();
+                }, 200);
+            }
+        }
+
+        function toggleTheme() {
+            const html = document.documentElement;
+            const themeIcon = document.getElementById('themeIcon');
+            if (html.classList.contains('dark')) {
+                html.classList.remove('dark');
+                themeIcon.className = "fa-solid fa-moon text-lg";
+            } else {
+                html.classList.add('dark');
+                themeIcon.className = "fa-solid fa-sun text-lg text-amber-400";
+            }
+        }
+    </script>
+</body>
+</html>
